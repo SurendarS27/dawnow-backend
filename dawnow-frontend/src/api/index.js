@@ -58,7 +58,8 @@ export const dailyLogAPI = {
     update: (id, data) => API.put(`/dailylog/${id}`, data),
     getStats: () => API.get('/dailylog/stats'),
     getByUser: (userId) => API.get(`/dailylog/user/${userId}`),
-    getByUserAndDate: (userId, date) => API.get(`/dailylog/user/${userId}/date/${date}`)
+    getByUserAndDate: (userId, date) => API.get(`/dailylog/user/${userId}/date/${date}`),
+    getAllAdmin: (params) => API.get('/dailylog/admin', { params })
 }
 
 // ============ GOALS API ============
@@ -201,4 +202,11 @@ export const authAPI = {
     changePassword: (data) => API.post('/auth/change-password', data),
     forgotPassword: (email) => API.post('/auth/forgot-password', email),
     resetPassword: (token, data) => API.post(`/auth/reset-password/${token}`, data)
+}
+
+// ============ SETTINGS API ============
+export const settingsAPI = {
+    getSetting: (key) => API.get(`/settings/${key}`),
+    setSetting: (key, value, description) => API.post('/settings', { key, value, description }),
+    getAll: () => API.get('/settings')
 }

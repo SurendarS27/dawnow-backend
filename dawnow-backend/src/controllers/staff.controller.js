@@ -4,6 +4,7 @@ const PwdRequest = require('../models/PwdRequest');
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const { runBackup } = require('../backup/backupEngine');
+const { getAutoApprovalEnabled } = require('../controllers/settings.controller');
 
 // @desc    Get staff tasks
 // @route   GET /api/staff/tasks
@@ -50,18 +51,22 @@ const { calculateTaskScore } = require('../utils/scoreCalculator');
 const createTask = async (req, res) => {
     try {
         const currentHour = new Date().getHours();
-        const autoApprove = currentHour >= 17; // 5 PM or later
+        const isAfter5PM = currentHour >= 17; // 5 PM or later
+        
+        // Check if auto-approval is enabled and time is after 5 PM
+        const autoApprovalEnabled = await getAutoApprovalEnabled();
+        const shouldAutoApprove = autoApprovalEnabled && isAfter5PM;
 
         const taskData = {
             ...req.body,
             staff: req.user._id,
-            ...(autoApprove && { status: 'approved', adminNote: 'Auto-approved (Submitted after 5 PM)' })
+            ...(shouldAutoApprove && { status: 'approved', adminNote: 'Auto-approved (Submitted after 5 PM)' })
         };
 
         const task = await TaskEntry.create(taskData);
         await task.populate('staff', 'name staffId department designation');
 
-        if (autoApprove) {
+        if (shouldAutoApprove) {
             const user = await User.findById(req.user._id);
             if (user) {
                 const taskScore = await calculateTaskScore(task);
@@ -146,11 +151,15 @@ const updateTask = async (req, res) => {
         }
 
         const currentHour = new Date().getHours();
-        const autoApprove = currentHour >= 17; // 5 PM or later
+        const isAfter5PM = currentHour >= 17;
+        
+        // Check if auto-approval is enabled and time is after 5 PM
+        const autoApprovalEnabled = await getAutoApprovalEnabled();
+        const shouldAutoApprove = autoApprovalEnabled && isAfter5PM;
 
         const updateData = {
             ...req.body,
-            ...(autoApprove && { status: 'approved', adminNote: 'Auto-approved (Edited after 5 PM)' })
+            ...(shouldAutoApprove && { status: 'approved', adminNote: 'Auto-approved (Edited after 5 PM)' })
         };
 
         const updatedTask = await TaskEntry.findByIdAndUpdate(
@@ -159,7 +168,7 @@ const updateTask = async (req, res) => {
             { new: true, runValidators: true }
         ).populate('staff', 'name staffId department designation');
 
-        if (autoApprove) {
+        if (shouldAutoApprove) {
             const user = await User.findById(req.user._id);
             if (user) {
                 const taskScore = await calculateTaskScore(updatedTask);

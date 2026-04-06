@@ -19,16 +19,57 @@ const getDatesInRange = (startDate, endDate) => {
     return dates;
 };
 
-// 🔧 TEXT CLEANING FUNCTION (Requested)
+// 🔧 ENHANCED TEXT CLEANING FUNCTION - Strips AI garbage text and corrupted responses
 const cleanCellText = (text, maxLength = 120) => {
     if (!text || typeof text !== 'string') return '';
+    
+    // Skip if it looks like AI response garbage (contains Ø, Û, or similar encoding artifacts)
+    if (/[ØÛÞß§¤£¥µ²³¹¼½¾¿]/.test(text)) {
+        console.log('[PDF CLEAN] Stripped garbled text:', text.substring(0, 50));
+        return '';
+    }
+    
+    // Strip common AI response prefixes that indicate non-data content
+    const aiResponsePatterns = [
+        /^got it[\s,:.-]*/i,
+        /^sure[\s,:.-]*/i,
+        /^of course[\s,:.-]*/i,
+        /^yes[\s,:.-]*/i,
+        /^here[\s,:.-]*/i,
+        /^thank you[\s,:.-]*/i,
+        /^thanks[\s,:.-]*/i,
+        /^.et me/i,
+        /^.orrected/i,
+        /^.orrecting/i,
+        /^ai:+/i,
+        /^assistant:+/i,
+        /^output:+/i,
+        /^response:+/i,
+        /^note:+/i,
+        /^analysis:+/i,
+    ];
+    
+    for (const pattern of aiResponsePatterns) {
+        text = text.replace(pattern, '');
+    }
+    
+    // Strip encoded/garbage patterns
+    text = text.replace(/Ø/g, 'O').replace(/Û/g, 'U').replace(/Þ/g, 'P').replace(/ß/g, 'ss');
+    
     // Strip URLs
     text = text.replace(/https?:\/\/[^\s]+/g, '');
+    
     // Strip newlines, tabs, and carriage returns
     text = text.replace(/[\r\n\t]+/g, ' ');
+    
     // Strip excessive whitespaces
     text = text.replace(/\s{2,}/g, ' ');
+    
     text = text.trim();
+    
+    // If text is too short after cleaning or is just noise, return empty
+    if (text.length < 3) return '';
+    
     // Truncate to maxLength
     return text.length > maxLength
         ? text.substring(0, maxLength) + '...'
@@ -71,14 +112,25 @@ const generatePDF = async (req, res) => {
         const dateRange = getDatesInRange(startDate, endDate);
 
         // Fetch staff
+        // NEW: Check if user is Admin or Staff. 
+        // If Staff: They can ONLY see their own data.
+        // If Admin: They can see all or by department.
+        const isAdmin = req.user.role === 'admin';
         const staffQuery = { role: 'staff' };
-        if (dept) staffQuery.department = dept;
+        
+        if (!isAdmin) {
+            staffQuery._id = req.user._id;
+        } else if (dept) {
+            staffQuery.department = dept;
+        }
+        
         const staffList = await User.find(staffQuery).sort({ name: 1 });
 
         // Fetch logs and tasks for all staff in range
+        const staffIds = staffList.map(s => s._id);
         const [logs, tasks] = await Promise.all([
-            DailyLog.find({ date: { $gte: startDate, $lte: endDate } }),
-            TaskEntry.find({ date: { $gte: startDate, $lte: endDate } })
+            DailyLog.find({ staff: { $in: staffIds }, date: { $gte: startDate, $lte: endDate } }),
+            TaskEntry.find({ staff: { $in: staffIds }, date: { $gte: startDate, $lte: endDate } })
         ]);
 
         // Create PDF document (Landscape)
@@ -95,7 +147,9 @@ const generatePDF = async (req, res) => {
         doc.pipe(res);
 
         const pageWidth = doc.page.width;
-        const logoPath = path.join(__dirname, '..', '..', '..', 'dawnow-frontend', 'public', 'images', 'logo-jjcet.jpg');
+        const logoPath = fs.existsSync(path.join(__dirname, '..', '..', '..', 'dawnow-frontend', 'public', 'images', 'logo-jjcet.jpg'))
+            ? path.join(__dirname, '..', '..', '..', 'dawnow-frontend', 'public', 'images', 'logo-jjcet.jpg')
+            : path.join(__dirname, '..', 'assets', 'logo-jjcet.jpg');
 
         // --- Header Section Drawing Function (to reuse for new pages) ---
         const drawHeader = (doc, currentY) => {
@@ -189,24 +243,51 @@ const generatePDF = async (req, res) => {
                     }
 
                     let items = [];
-                    if (dayLog && dayLog.workDone && dayLog.workDone.trim() !== '') {
-                        let cleaned = dayLog.workDone.replace(/https?:\/\/[^\s]+/g, '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-                        if (cleaned.length > 120) cleaned = cleaned.substring(0, 120) + '...';
-                        if (cleaned.length > 3) items.push(cleaned);
+                    const cleanItem = (str) => {
+                        if (!str || typeof str !== 'string') return '';
+                        // Detect garbled/AI garbage text and strip it
+                        if (/[ØÛÞß§¤£¥µ²³¹¼½¾¿]/.test(str)) {
+                            return '';
+                        }
+                        // Clean as before + basic AI prefix stripping
+                        let cleaned = str.trim()
+                            .replace(/^[0-9]+[\.\)\-\s]+/, '')
+                            .replace(/^(got it|of course|sure|yes|here|thank you|thanks|let me|corrected)\s*:*/i, '')
+                            .trim();
+                        if (cleaned.length < 3) return '';
+                        if (cleaned.length > 60) {
+                            return cleaned.substring(0, 57).trim() + '...';
+                        }
+                        return cleaned;
+                    };
+
+                    // NEW: Pull work summary from Daily Log first as it represents the daily entry
+                    if (dayLog && dayLog.workDone) {
+                        items.push(`${dayLog.category || 'Work'}: ${cleanItem(dayLog.workDone)}`);
                     }
                     
                     dayTasks.forEach(task => {
-                        if (task.paperTitle) items.push(`Paper: ${String(task.paperTitle).substring(0,100)}`);
-                        if (task.projectName) items.push(`Project: ${String(task.projectName).substring(0,100)}`);
-                        if (task.patentTitle) items.push(`Patent: ${String(task.patentTitle).substring(0,100)}`);
-                        if (task.bookTitle) items.push(`Book: ${String(task.bookTitle).substring(0,100)}`);
-                        if (task.activityTitle) items.push(`Activity: ${String(task.activityTitle).substring(0,100)}`);
+                        if (task.paperTitle) items.push(`Paper: ${cleanItem(task.paperTitle)}`);
+                        if (task.projectName) items.push(`Project: ${cleanItem(task.projectName)}`);
+                        if (task.patentTitle) items.push(`Patent: ${cleanItem(task.patentTitle)}`);
+                        if (task.bookTitle) items.push(`Book: ${cleanItem(task.bookTitle)}`);
+                        if (task.activityTitle) items.push(`Activity: ${cleanItem(task.activityTitle)}`);
                         for (let i = 1; i <= 5; i++) {
-                            if (task[`additionalWorkload${i}`]) items.push(String(task[`additionalWorkload${i}`]).substring(0,100));
+                            if (task[`additionalWorkload${i}`]) items.push(cleanItem(task[`additionalWorkload${i}`]));
+                        }
+                        
+                        if (task.dynamicAnswers && typeof task.dynamicAnswers === 'object') {
+                            Object.values(task.dynamicAnswers).forEach(val => {
+                                if (val && typeof val === 'string' && val.trim() !== '') {
+                                    items.push(cleanItem(val));
+                                } else if (Array.isArray(val) && val.length > 0) {
+                                    items.push(cleanItem(val.join(', ')));
+                                }
+                            });
                         }
                     });
 
-                    items = items.filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 5);
+                    items = items.filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 7); 
                     rowContents.push(items.length > 0 ? { type: 'text', items } : { type: 'empty' });
                 });
 
@@ -299,17 +380,30 @@ const generatePDF = async (req, res) => {
                     let items = [];
                     if (dayLog && dayLog.isLeaveDay) items = ['Leave'];
                     else {
+                        // Include Daily Log entry with cleaning
                         if (dayLog && dayLog.workDone) {
-                            let cleaned = dayLog.workDone.replace(/https?:\/\/[^\s]+/g, '').replace(/[\r\n\t]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-                            if (cleaned.length > 120) cleaned = cleaned.substring(0, 120) + '...';
-                            if (cleaned.length > 3) items.push(cleaned);
+                            const cleaned = cleanCellText(dayLog.workDone, 100);
+                            if (cleaned) items.push(`${dayLog.category || 'Daily Work'}: ${cleaned}`);
                         }
+
                         dayTasks.forEach(task => {
-                            if (task.paperTitle) items.push(`Paper: ${task.paperTitle}`);
-                            if (task.projectName) items.push(`Project: ${task.projectName}`);
-                            if (task.patentTitle) items.push(`Patent: ${task.patentTitle}`);
-                            if (task.bookTitle) items.push(`Book: ${task.bookTitle}`);
-                            if (task.activityTitle) items.push(`Activity: ${task.activityTitle}`);
+                            if (task.paperTitle) { const c = cleanCellText(task.paperTitle, 60); if (c) items.push(`Paper: ${c}`); }
+                            if (task.projectName) { const c = cleanCellText(task.projectName, 60); if (c) items.push(`Project: ${c}`); }
+                            if (task.patentTitle) { const c = cleanCellText(task.patentTitle, 60); if (c) items.push(`Patent: ${c}`); }
+                            if (task.bookTitle) { const c = cleanCellText(task.bookTitle, 60); if (c) items.push(`Book: ${c}`); }
+                            if (task.activityTitle) { const c = cleanCellText(task.activityTitle, 60); if (c) items.push(`Activity: ${c}`); }
+                            
+                            if (task.dynamicAnswers && typeof task.dynamicAnswers === 'object') {
+                                Object.values(task.dynamicAnswers).forEach(val => {
+                                    if (val && typeof val === 'string' && val.trim() !== '') {
+                                        const c = cleanCellText(val, 60);
+                                        if (c) items.push(c);
+                                    } else if (Array.isArray(val) && val.length > 0) {
+                                        const c = cleanCellText(val.join(', '), 60);
+                                        if (c) items.push(c);
+                                    }
+                                });
+                            }
                         });
                     }
 
@@ -378,13 +472,22 @@ const generateExcel = async (req, res) => {
         const endDate = new Date(to);
         const dateRange = getDatesInRange(startDate, endDate);
 
+        // Fetch staff
+        const isAdmin = req.user.role === 'admin';
         const staffQuery = { role: 'staff' };
-        if (dept) staffQuery.department = dept;
+
+        if (!isAdmin) {
+            staffQuery._id = req.user._id;
+        } else if (dept) {
+            staffQuery.department = dept;
+        }
+
         const staffList = await User.find(staffQuery).sort({ name: 1 });
 
+        const staffIds = staffList.map(s => s._id);
         const [logs, tasks] = await Promise.all([
-            DailyLog.find({ date: { $gte: startDate, $lte: endDate } }),
-            TaskEntry.find({ date: { $gte: startDate, $lte: endDate } })
+            DailyLog.find({ staff: { $in: staffIds }, date: { $gte: startDate, $lte: endDate } }),
+            TaskEntry.find({ staff: { $in: staffIds }, date: { $gte: startDate, $lte: endDate } })
         ]);
 
         const workbook = new ExcelJS.Workbook();
@@ -404,7 +507,9 @@ const generateExcel = async (req, res) => {
         titleCell.alignment = { horizontal: 'center', vertical: 'bottom' };
 
         // Add Logo centered in the top area
-        const logoPath = path.join(__dirname, '..', '..', '..', 'dawnow-frontend', 'public', 'images', 'logo-jjcet.jpg');
+        const logoPath = fs.existsSync(path.join(__dirname, '..', '..', '..', 'dawnow-frontend', 'public', 'images', 'logo-jjcet.jpg'))
+            ? path.join(__dirname, '..', '..', '..', 'dawnow-frontend', 'public', 'images', 'logo-jjcet.jpg')
+            : path.join(__dirname, '..', 'assets', 'logo-jjcet.jpg');
         if (fs.existsSync(logoPath)) {
             const logo = workbook.addImage({
                 filename: logoPath,
@@ -478,10 +583,7 @@ const generateExcel = async (req, res) => {
                 }
 
                 let items = [];
-                if (dayLog && dayLog.workDone && dayLog.workDone.trim() !== '') {
-                    items.push(dayLog.workDone.trim());
-                }
-
+                
                 dayTasks.forEach(task => {
                     if (task.paperTitle) items.push(`Paper: ${task.paperTitle}`);
                     if (task.projectName) items.push(`Project: ${task.projectName}`);

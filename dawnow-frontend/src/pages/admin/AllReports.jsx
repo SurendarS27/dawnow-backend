@@ -3,10 +3,11 @@ import API from '../../api/axios'
 import Badge from '../../components/ui/Badge'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import { FileDown, Check, X, Search, Filter, FileText, Download, RefreshCw } from 'lucide-react'
+import { FileDown, Check, X, Search, Filter, FileText, Download, RefreshCw, Power } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { jsPDF } from 'jspdf'
 import * as XLSX from 'xlsx'
+import { settingsAPI } from '../../api'
 
 const AllReports = () => {
     const [tasks, setTasks] = useState([])
@@ -19,6 +20,7 @@ const AllReports = () => {
     const [page, setPage] = useState(1)
     const [totalPages, setTotalPages] = useState(1)
     const [downloading, setDownloading] = useState(false)
+    const [autoApprovalEnabled, setAutoApprovalEnabled] = useState(true)
 
     const departments = ['CSE', 'EEE', 'ECE', 'MECH', 'CIVIL', 'IT', 'MCA']
 
@@ -48,6 +50,32 @@ const AllReports = () => {
     useEffect(() => {
         fetchTasks()
     }, [page, dept, fromDate, toDate, status])
+
+    // Fetch auto-approval setting on mount
+    useEffect(() => {
+        const fetchAutoApprovalSetting = async () => {
+            try {
+                const response = await settingsAPI.getSetting('autoApprovalEnabled')
+                // Default to true if not set
+                setAutoApprovalEnabled(response.data.value !== false)
+            } catch (error) {
+                console.error('Error fetching auto-approval setting:', error)
+                setAutoApprovalEnabled(true)
+            }
+        }
+        fetchAutoApprovalSetting()
+    }, [])
+
+    const handleAutoApprovalToggle = async () => {
+        try {
+            const newValue = !autoApprovalEnabled
+            await settingsAPI.setSetting('autoApprovalEnabled', newValue, 'Enable/disable automatic approval of reports submitted after 5 PM')
+            setAutoApprovalEnabled(newValue)
+            toast.success(newValue ? 'Auto Approval enabled' : 'Auto Approval disabled')
+        } catch (error) {
+            toast.error('Failed to update setting')
+        }
+    }
 
     const handleStatusUpdate = async (taskId, newStatus) => {
         try {
@@ -188,6 +216,20 @@ const AllReports = () => {
                     >
                         <RefreshCw size={18} />
                         Refresh
+                    </button>
+                    <button
+                        onClick={handleAutoApprovalToggle}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                            autoApprovalEnabled 
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300' 
+                                : 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
+                        }`}
+                        title={autoApprovalEnabled ? 'Auto Approval ON - Reports after 5 PM auto-approved' : 'Auto Approval OFF - All reports require manual approval'}
+                    >
+                        <Power size={18} className={autoApprovalEnabled ? 'animate-pulse' : ''} />
+                        <span className="text-sm font-bold">
+                            {autoApprovalEnabled ? '🟢 Auto Approval' : '🔴 Manual Only'}
+                        </span>
                     </button>
                 </div>
             </div>

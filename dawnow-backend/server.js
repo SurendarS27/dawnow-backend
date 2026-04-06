@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
 const { Server } = require('socket.io');
+const mongoSanitize = require('express-mongo-sanitize');
 const connectDB = require('./src/config/db');
 
 // Import routes
@@ -46,14 +47,21 @@ app.use(helmet({
 }));
 
 // CORS configuration
-app.use(cors({
-    origin: ['http://localhost:5173', 'http://localhost:5174', process.env.CLIENT_URL].filter(Boolean),
-    credentials: true
-}));
+const corsOptions = {
+    origin: [
+        'http://localhost:5173',
+        'https://jjcfrd.netlify.app'
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
 
 // Body parser
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(mongoSanitize());
 
 // Logging
 if (process.env.NODE_ENV === 'development') {
@@ -76,7 +84,12 @@ const authLimiter = rateLimit({
     max: 30, // limit each IP to 30 requests per windowMs
     message: 'Too many authentication attempts, please try again later.'
 });
-app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/', authLimiter);
+
+// Health check (Public)
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', message: 'DAW NOW API is running' });
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -94,17 +107,18 @@ app.use('/api/notices', noticeRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/answers', answerRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/stats', require('./src/routes/adminStats.routes'));
+
+// Settings API
+app.use('/api/settings', require('./src/routes/settings.routes'));
 
 // Backup & Recovery System
 require('./src/backup/crashDetector').startCrashDetector();
 require('./src/backup/scheduler').initMonthlyBackup();
+require('./src/utils/autoApprover').initAutoApproval(); // 5:00 PM Auto-Approval Sync
 app.use('/api', require('./src/routes/backupRoutes'));
 app.use('/api', require('./src/backup/fallbackMode'));
 
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'DAW NOW API is running' });
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -133,7 +147,11 @@ const startServer = async () => {
         // Initialize Socket.IO
         const io = new Server(server, {
             cors: {
-                origin: ['http://localhost:5173', 'http://localhost:5174', process.env.CLIENT_URL].filter(Boolean),
+                origin: [
+                    'http://localhost:5173',
+                    'https://jjcfrd.netlify.app'
+                ],
+                methods: ['GET', 'POST'],
                 credentials: true
             }
         });
