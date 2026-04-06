@@ -6,9 +6,10 @@ export const socket = io(SOCKET_URL, {
     autoConnect: false,
     reconnection: true,
     reconnectionAttempts: 5,
-    reconnectionDelay: 1000
+    reconnectionDelay: 1000,
+    withCredentials: true,
+    transports: ['websocket', 'polling']
 })
-
 export const connectSocket = (userRole) => {
     if (!socket.connected) {
         socket.connect()

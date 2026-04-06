@@ -7,8 +7,11 @@ import Badge from '../../components/ui/Badge';
 
 const DailyLog = () => {
     const [todayLog, setTodayLog] = useState(null);
+    const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [streak, setStreak] = useState(0);
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
     const [formData, setFormData] = useState({
         date: new Date().toISOString().split('T')[0],
         workDone: '',
@@ -50,6 +53,7 @@ const DailyLog = () => {
                     });
                 }
                 setStreak(streakRes.data.streak);
+                fetchLogs();
             } catch (err) {
                 console.error(err);
             } finally {
@@ -60,6 +64,28 @@ const DailyLog = () => {
         fetchTodayData();
     }, []);
 
+    const fetchLogs = async () => {
+        try {
+            const params = {};
+            if (fromDate) params.from = fromDate;
+            if (toDate) params.to = toDate;
+            const res = await API.get('/dailylog', { params });
+            setLogs(res.data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const groupLogsByDate = (logs) => {
+        const groups = {};
+        logs.forEach(log => {
+            const date = new Date(log.date).toDateString();
+            if (!groups[date]) groups[date] = [];
+            groups[date].push(log);
+        });
+        return groups;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -67,8 +93,11 @@ const DailyLog = () => {
             setTodayLog(res.data);
             toast.success(todayLog ? 'Log updated!' : 'Log submitted!');
 
-            // Re-fetch streak
-            const streakRes = await API.get('/dailylog/streak');
+            // Re-fetch streak and logs
+            const [streakRes] = await Promise.all([
+                API.get('/dailylog/streak'),
+                fetchLogs()
+            ]);
             setStreak(streakRes.data.streak);
         } catch (err) {
             toast.error(err.response?.data?.message || 'Failed to submit log');
@@ -262,6 +291,75 @@ const DailyLog = () => {
                 </div>
             </form>
 
+            <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                <div className="p-6 border-b flex justify-between items-center">
+                    <h2 className="font-bold text-slate-800 flex items-center">
+                        <Clock className="w-5 h-5 mr-2 text-primary-green" />
+                        Log History
+                    </h2>
+                    <div className="flex items-center space-x-2">
+                        <input 
+                            type="date" 
+                            className="text-xs border rounded p-1" 
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                        />
+                        <span className="text-xs text-slate-400">to</span>
+                        <input 
+                            type="date" 
+                            className="text-xs border rounded p-1" 
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                        />
+                        <button 
+                            onClick={fetchLogs}
+                            className="text-xs bg-slate-100 px-2 py-1 rounded font-bold text-slate-600 hover:bg-slate-200"
+                        >
+                            Filter
+                        </button>
+                    </div>
+                </div>
+                
+                <div className="divide-y divide-slate-100">
+                    {logs.length === 0 ? (
+                        <div className="p-12 text-center text-slate-400">No logs found for this period.</div>
+                    ) : (
+                        Object.entries(groupLogsByDate(logs)).map(([date, dateLogs]) => (
+                            <div key={date} className="p-6">
+                                <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center">
+                                    <div className="h-px bg-slate-100 flex-grow mr-4"></div>
+                                    {date}
+                                    <div className="h-px bg-slate-100 flex-grow ml-4"></div>
+                                </h3>
+                                <div className="space-y-4">
+                                    {dateLogs.map((log, i) => (
+                                        <div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 relative group">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <div className="flex items-center space-x-3">
+                                                    <Badge variant="outline">{log.category}</Badge>
+                                                    <span className="text-xs font-bold text-slate-500 flex items-center">
+                                                        <Clock className="w-3 h-3 mr-1" /> {log.hoursSpent} hrs
+                                                    </span>
+                                                    {log.isLeaveDay && <Badge variant="rejected">Leave</Badge>}
+                                                </div>
+                                                <span className="text-xl">{moods.find(m => m.name === log.mood)?.icon}</span>
+                                            </div>
+                                            <p className="text-slate-700 text-sm font-medium leading-relaxed">{log.workDone}</p>
+                                            {log.tomorrowPlan && (
+                                                <div className="mt-3 pt-3 border-t border-slate-200/50">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter mb-1">Tomorrow's Plan</p>
+                                                    <p className="text-slate-500 text-xs italic">{log.tomorrowPlan}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
                 <h3 className="font-bold text-slate-800 mb-4 flex items-center">
                     <TrendingUp className="w-4 h-4 mr-2 text-primary-green" />
@@ -285,13 +383,16 @@ const DailyLog = () => {
                         const days = Array.from({ length: daysInMonth }, (_, i) => {
                             const dayNum = i + 1;
                             const isToday = dayNum === now.getDate();
+                            const hasLog = logs.some(l => new Date(l.date).getDate() === dayNum && new Date(l.date).getMonth() === month);
                             return (
                                 <div
                                     key={dayNum}
                                     className={`aspect-square rounded border flex items-center justify-center text-xs font-bold transition-all ${
                                         isToday
                                             ? 'bg-primary-green text-white border-primary-green ring-2 ring-primary-green/30'
-                                            : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-primary-green/10 hover:border-primary-green/30'
+                                            : hasLog 
+                                                ? 'bg-primary-green/20 text-primary-green border-primary-green/20'
+                                                : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-primary-green/10 hover:border-primary-green/30'
                                     }`}
                                 >
                                     {dayNum}

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import ProtectedRoute from './components/ProtectedRoute'
 import StaffLayout from './components/StaffLayout'
 import AdminLayout from './components/AdminLayout'
+import FallbackBanner from './components/ui/FallbackBanner'
 
 // Lazy loaded components for better performance
 const StaffDashboard = lazy(() => import('./pages/staff/Dashboard'))
@@ -55,6 +56,7 @@ function App() {
 
     return (
         <Suspense fallback={<LoadingFallback />}>
+            <FallbackBanner />
             <Routes>
                 <Route path="/login" element={<Login />} />
 

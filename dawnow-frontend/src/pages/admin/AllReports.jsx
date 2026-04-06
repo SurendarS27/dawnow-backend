@@ -224,7 +224,7 @@ const AllReports = () => {
                                 ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-300' 
                                 : 'bg-red-100 text-red-700 hover:bg-red-200 border border-red-300'
                         }`}
-                        title={autoApprovalEnabled ? 'Auto Approval ON - Reports after 5 PM auto-approved' : 'Auto Approval OFF - All reports require manual approval'}
+                        title={autoApprovalEnabled ? 'Auto Approval ON - Reports before 5 PM auto-approved' : 'Auto Approval OFF - All reports require manual approval'}
                     >
                         <Power size={18} className={autoApprovalEnabled ? 'animate-pulse' : ''} />
                         <span className="text-sm font-bold">

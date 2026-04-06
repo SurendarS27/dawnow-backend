@@ -5,373 +5,518 @@ import {
     LineChart, Line, PieChart, Pie, Cell, AreaChart, Area
 } from 'recharts';
 import {
-    Activity, Book, Award, Users, FileText,
-    ArrowUpRight, Download, Calendar, Filter
+    Activity, Users, FileText, Download, Calendar, Filter, 
+    Briefcase, TrendingUp, FileSpreadsheet, Search, Award
 } from 'lucide-react';
 import Badge from '../../components/ui/Badge';
+import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 const Analytics = () => {
-    const [overview, setOverview] = useState({
-        sciPapersAccepted: 0,
-        sciPapersPublished: 0,
-        scopusPapersAccepted: 0,
-        scopusPapersPublished: 0,
-        patentPublished: 0,
-        patentGrant: 0,
-        conferencePapersAccepted: 0,
-        conferencePapersPublished: 0,
-        bookChaptersAccepted: 0,
-        bookChaptersPublished: 0,
-        fundingApplied: 0,
-        fundingReceived: 0,
-        totalPapers: 0,
-        totalSCI: 0,
-        totalPatents: 0,
-        totalFunded: 0
+    const [summary, setSummary] = useState({
+        totalFaculty: 0,
+        activeProjects: 0,
+        reportsThisMonth: 0,
+        logsThisWeek: 0
     });
-    const [periodData, setPeriodData] = useState({
-        papers: 0,
-        patents: 0,
-        funded: 0,
-        activities: 0
-    });
-    const [deptData, setDeptData] = useState([]);
-    const [trendData, setTrendData] = useState([]);
-    const [topPerformers, setTopPerformers] = useState([]);
+    const [dailyLogs, setDailyLogs] = useState([]);
+    const [activitiesByType, setActivitiesByType] = useState([]);
+    const [projectStatus, setProjectStatus] = useState([]);
+    const [monthlySummary, setMonthlySummary] = useState([]);
+    const [facultyTable, setFacultyTable] = useState([]);
+    const [reportData, setReportData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [period, setPeriod] = useState('overview'); // 'overview', 'weekly', 'monthly'
+    const [searchTerm, setSearchTerm] = useState('');
 
-    const COLORS = ['#16a34a', '#2563eb', '#f59e0b', '#ef4444', '#8b5cf6'];
+    const COLORS = ['#16a34a', '#2563eb', '#f59e0b', '#8b5cf6', '#ef4444'];
 
     useEffect(() => {
-        const fetchAnalytics = async () => {
+        const fetchAllStats = async () => {
             setLoading(true);
             try {
-                const [ovRes, deptRes, trRes, topRes, periodRes] = await Promise.all([
-                    API.get('/analytics/overview'),
-                    API.get('/analytics/by-department'),
-                    API.get('/analytics/monthly-trend'),
-                    API.get('/analytics/top-performers'),
-                    period === 'overview' ? Promise.resolve({ data: null }) : API.get(`/analytics/${period}`)
+                const [sumRes, logRes, typeRes, statusRes, monthRes, tableRes, reportRes] = await Promise.all([
+                    API.get('/stats/summary'),
+                    API.get('/stats/daily-logs'),
+                    API.get('/stats/activities-by-type'),
+                    API.get('/stats/project-status'),
+                    API.get('/stats/monthly-summary'),
+                    API.get('/stats/faculty-table'),
+                    API.get('/stats/analytical-report')
                 ]);
-                
-                setOverview(ovRes.data || {
-                    sciPapersAccepted: 0,
-                    sciPapersPublished: 0,
-                    scopusPapersAccepted: 0,
-                    scopusPapersPublished: 0,
-                    patentPublished: 0,
-                    patentGrant: 0,
-                    conferencePapersAccepted: 0,
-                    conferencePapersPublished: 0,
-                    bookChaptersAccepted: 0,
-                    bookChaptersPublished: 0,
-                    fundingApplied: 0,
-                    fundingReceived: 0,
-                    totalPapers: 0,
-                    totalSCI: 0,
-                    totalPatents: 0,
-                    totalFunded: 0
-                });
 
-                if (period !== 'overview' && periodRes.data) {
-                    setPeriodData(periodRes.data);
-                }
-
-                setDeptData(deptRes.data || []);
-                setTrendData(trRes.data || []);
-                setTopPerformers(topRes.data || []);
+                setSummary(sumRes.data);
+                setDailyLogs(logRes.data);
+                setActivitiesByType(typeRes.data);
+                setProjectStatus(statusRes.data);
+                setMonthlySummary(monthRes.data);
+                setFacultyTable(tableRes.data);
+                setReportData(reportRes.data);
             } catch (err) {
-                console.error(err);
+                console.error('Stats fetch error:', err);
+                toast.error('Failed to load real-time analytics');
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchAnalytics();
-    }, [period]);
+        fetchAllStats();
+    }, []);
 
-    const getDisplayStats = () => {
-        if (period === 'overview') {
-            return [
-                { label: 'Total Papers', value: overview?.totalPapers || 0, icon: Book, color: 'emerald', trend: '+12%' },
-                { label: 'SCI Publications', value: overview?.totalSCI || 0, icon: FileText, color: 'blue', trend: '+5%' },
-                { label: 'Patents Filed', value: overview?.totalPatents || 0, icon: Award, color: 'amber', trend: '+2' },
-                { label: 'Grants Received', value: overview?.totalFunded || 0, icon: Activity, color: 'purple', trend: 'New!' }
-            ];
-        } else {
-            return [
-                { label: `${period === 'weekly' ? 'Weekly' : 'Monthly'} Papers`, value: periodData.papers || 0, icon: Book, color: 'emerald', trend: 'Selected' },
-                { label: `${period === 'weekly' ? 'Weekly' : 'Monthly'} Patents`, value: periodData.patents || 0, icon: Award, color: 'amber', trend: 'Selected' },
-                { label: `${period === 'weekly' ? 'Weekly' : 'Monthly'} Projects`, value: periodData.funded || 0, icon: Activity, color: 'purple', trend: 'Selected' },
-                { label: `${period === 'weekly' ? 'Weekly' : 'Monthly'} Activities`, value: periodData.activities || 0, icon: FileText, color: 'blue', trend: 'Selected' }
-            ];
+    const exportToCSV = () => {
+        const worksheet = XLSX.utils.json_to_sheet(facultyTable);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Faculty Analytics");
+        XLSX.writeFile(workbook, "CFRD_Faculty_Analytics.xlsx");
+        toast.success('Excel report exported!');
+    };
+
+    const exportToPDF = async () => {
+        if (!reportData) return;
+        
+        try {
+            toast.loading('Generating Analytical Report...');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            
+            // Header
+            pdf.setFontSize(18);
+            pdf.setTextColor(22, 163, 74); // primary-green
+            pdf.text('JJCET - CFRD RESEARCH ANALYTICAL REPORT', pageWidth / 2, 20, { align: 'center' });
+            
+            pdf.setFontSize(10);
+            pdf.setTextColor(100, 100, 100);
+            pdf.text(`Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, pageWidth / 2, 28, { align: 'center' });
+            
+            pdf.setDrawColor(200, 200, 200);
+            pdf.line(15, 35, pageWidth - 15, 35);
+
+            pdf.setFontSize(11);
+            pdf.setTextColor(0, 0, 0);
+            
+            const startY = 60;
+            const colWidth = (pageWidth - 40) / 4;
+            const rowHeight = 45;
+
+            // Row 1
+            // Col 1: sci papers
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('sci papers', 20, startY);
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'normal');
+            pdf.setTextColor(100, 100, 100);
+            pdf.text('accepted / published', 20, startY + 6);
+            pdf.setFontSize(14);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(`${reportData.sci.accepted}  /  ${reportData.sci.published}`, 20, startY + 16);
+            pdf.setDrawColor(22, 163, 74);
+            pdf.line(20, startY + 18, 55, startY + 18);
+
+            // Col 2: Scopus paper
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Scopus paper', 20 + colWidth, startY);
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'normal');
+            pdf.setTextColor(100, 100, 100);
+            pdf.text('accepted / published', 20 + colWidth, startY + 6);
+            pdf.setFontSize(14);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(`${reportData.scopus.accepted}  /  ${reportData.scopus.published}`, 20 + colWidth, startY + 16);
+            pdf.line(20 + colWidth, startY + 18, 20 + colWidth + 35, startY + 18);
+
+            // Col 3: patent published
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('patent published', 20 + colWidth * 2, startY);
+            pdf.setFontSize(14);
+            pdf.text(`${reportData.patent.published}`, 20 + colWidth * 2, startY + 16);
+            pdf.line(20 + colWidth * 2, startY + 18, 20 + colWidth * 2 + 35, startY + 18);
+
+            // Col 4: patent grant
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('patent grant', 20 + colWidth * 3, startY);
+            pdf.setFontSize(14);
+            pdf.text(`${reportData.patent.grant}`, 20 + colWidth * 3, startY + 16);
+            pdf.line(20 + colWidth * 3, startY + 18, 20 + colWidth * 3 + 35, startY + 18);
+
+            // Row 2
+            const row2Y = startY + rowHeight;
+            // Col 1: conference paper
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('conference paper', 20, row2Y);
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'normal');
+            pdf.setTextColor(100, 100, 100);
+            pdf.text('accepted / published', 20, row2Y + 6);
+            pdf.setFontSize(14);
+            pdf.setTextColor(0, 0, 0);
+            pdf.text(`${reportData.conference.accepted}  /  ${reportData.conference.published}`, 20, row2Y + 16);
+            pdf.line(20, row2Y + 18, 55, row2Y + 18);
+
+            // Col 2: book/book chapter
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('book/book chapter', 20 + colWidth, row2Y);
+            pdf.setFontSize(14);
+            pdf.text(`${reportData.book} / ---`, 20 + colWidth, row2Y + 16);
+            pdf.line(20 + colWidth, row2Y + 18, 20 + colWidth + 35, row2Y + 18);
+
+            // Col 3: funding Applied
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('funding Applied', 20 + colWidth * 2, row2Y);
+            pdf.setFontSize(14);
+            pdf.text(`${reportData.funding.applied}`, 20 + colWidth * 2, row2Y + 16);
+            pdf.line(20 + colWidth * 2, row2Y + 18, 20 + colWidth * 2 + 35, row2Y + 18);
+
+            // Col 4: Funding received
+            pdf.setFontSize(12);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Funding received', 20 + colWidth * 3, row2Y);
+            pdf.setFontSize(14);
+            pdf.text(`${reportData.funding.received > 0 ? reportData.funding.received : 'nil'}`, 20 + colWidth * 3, row2Y + 16);
+            pdf.line(20 + colWidth * 3, row2Y + 18, 20 + colWidth * 3 + 35, row2Y + 18);
+
+            // Summary Page 2
+            pdf.addPage();
+            pdf.setFontSize(16);
+            pdf.setTextColor(22, 163, 74);
+            pdf.text('Consolidated Dashboard Metrics', pageWidth / 2, 20, { align: 'center' });
+            
+            const element = document.getElementById('analytics-content');
+            const canvas = await html2canvas(element, { scale: 1.5 });
+            const imgData = canvas.toDataURL('image/png');
+            const imgWidth = pageWidth - 40;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            pdf.addImage(imgData, 'PNG', 20, 30, imgWidth, imgHeight);
+
+            pdf.save('CFRD_Analytical_Report.pdf');
+            toast.dismiss();
+            toast.success('Professional Report Downloaded!');
+        } catch (err) {
+            console.error(err);
+            toast.dismiss();
+            toast.error('Failed to generate PDF');
         }
     };
 
-    const stats = getDisplayStats();
+    const filteredFaculty = facultyTable.filter(f => 
+        f.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        f.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        f.staffId.toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
-    const handleExportPDF = () => {
-        const token = localStorage.getItem('dawnow_token');
-        if (!token) {
-            toast?.error?.('Session expired. Please login again.') || alert('Session expired. Please login again.');
-            return;
-        }
-        const url = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/reports/analytics-pdf?token=${token}`;
-        window.open(url, '_blank');
-    };
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh]">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-green mb-4"></div>
+            <p className="text-gray-500 font-medium">Processing Analytical Data...</p>
+        </div>
+    );
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+            {/* Header - Matching Standard Style */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row justify-between items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800">CFRD Analytics Portal</h1>
-                    <p className="text-slate-500 text-sm">Real-time research performance monitoring.</p>
+                    <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                        <TrendingUp size={24} className="text-primary-green" />
+                        Executive Analytics
+                    </h1>
+                    <p className="text-gray-500 text-sm">Real-time performance metrics and research output tracking</p>
                 </div>
-                <div className="flex items-center space-x-3">
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                        <button
-                            onClick={() => setPeriod('overview')}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${period === 'overview' ? 'bg-white text-primary-green shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            Overview
-                        </button>
-                        <button
-                            onClick={() => setPeriod('weekly')}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${period === 'weekly' ? 'bg-white text-primary-green shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            Weekly
-                        </button>
-                        <button
-                            onClick={() => setPeriod('monthly')}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${period === 'monthly' ? 'bg-white text-primary-green shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            Monthly
-                        </button>
-                    </div>
-                    <button 
-                        onClick={handleExportPDF}
-                        className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-4 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-100 transition-all text-sm"
-                    >
-                        <Download className="w-4 h-4" />
-                        <span>Export Report</span>
+                <div className="flex items-center gap-3">
+                    <button onClick={exportToPDF} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-all border border-slate-200" title="Download PDF">
+                        <Download size={20} />
+                    </button>
+                    <button onClick={exportToCSV} className="flex items-center gap-2 px-4 py-2 bg-primary-green text-white rounded-lg font-bold hover:bg-green-700 shadow-sm transition-all text-sm">
+                        <FileSpreadsheet size={18} />
+                        Export Excel
                     </button>
                 </div>
             </div>
 
-            {period === 'overview' ? (
-                <div className="bg-slate-900 text-white p-8 rounded-2xl shadow-xl border border-slate-800 overflow-hidden relative">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-primary-green/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
-                    <h2 className="text-xl font-bold mb-8 flex items-center border-b border-slate-800 pb-4">
-                        <Activity className="w-5 h-5 mr-2 text-primary-green" />
-                        Research Output Overview
-                    </h2>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-y-10 gap-x-8 relative z-10">
-                        {/* Row 1 */}
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">sci papers</p>
-                            <p className="text-slate-500 text-[10px] uppercase">accepted / published</p>
-                            <div className="flex items-baseline space-x-1">
-                                <span className="text-3xl font-black text-white">{overview.sciPapersAccepted}</span>
-                                <span className="text-slate-600 text-xl">/</span>
-                                <span className="text-3xl font-black text-primary-green">{overview.sciPapersPublished}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Scopus paper</p>
-                            <p className="text-slate-500 text-[10px] uppercase">accepted / published</p>
-                            <div className="flex items-baseline space-x-1">
-                                <span className="text-3xl font-black text-white">{overview.scopusPapersAccepted}</span>
-                                <span className="text-slate-600 text-xl">/</span>
-                                <span className="text-3xl font-black text-primary-green">{overview.scopusPapersPublished}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">patent published</p>
-                            <div className="pt-4 flex items-center border-t border-slate-800">
-                                <span className="text-3xl font-black text-white">{overview.patentPublished}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">patent grant</p>
-                            <div className="pt-4 flex items-center border-t border-slate-800">
-                                <span className="text-3xl font-black text-white">{overview.patentGrant}</span>
-                            </div>
-                        </div>
-
-                        {/* Divider Line for Desktop */}
-                        <div className="hidden md:block col-span-4 h-px bg-primary-green/30 my-2"></div>
-
-                        {/* Row 2 */}
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">conference paper</p>
-                            <p className="text-slate-500 text-[10px] uppercase">accepted / published</p>
-                            <div className="flex items-baseline space-x-1">
-                                <span className="text-3xl font-black text-white">{overview.conferencePapersAccepted}</span>
-                                <span className="text-slate-600 text-xl">/</span>
-                                <span className="text-3xl font-black text-primary-green">{overview.conferencePapersPublished}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">book/book chapter</p>
-                            <div className="pt-4">
-                                <div className="flex items-baseline space-x-1">
-                                    <span className="text-3xl font-black text-white">{overview.bookChaptersAccepted}</span>
-                                    <span className="text-slate-600 text-xl">/</span>
-                                    <span className="text-3xl font-black text-primary-green">{overview.bookChaptersPublished}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">funding Applied</p>
-                            <div className="pt-4 flex items-center border-t border-slate-800">
-                                <span className="text-3xl font-black text-white">{overview.fundingApplied}</span>
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Funding received</p>
-                            <div className="pt-4 flex items-center border-t border-slate-800">
-                                <span className="text-3xl font-black text-white">{overview.fundingReceived || 'nil'}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {stats.map((stat, i) => (
-                        <div key={i} className={`bg-white p-6 rounded-xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-${stat.color}-200 transition-all cursor-pointer`}>
-                            <div className={`absolute top-0 right-0 w-24 h-24 -mr-8 -mt-8 bg-${stat.color}-500/5 rounded-full group-hover:bg-${stat.color}-500/10 transition-all`}></div>
-                            <div className="flex justify-between items-start">
-                                <stat.icon className={`w-10 h-10 text-${stat.color}-600 bg-${stat.color}-50 p-2 rounded-lg transition-transform group-hover:scale-110`} />
-                                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold flex items-center">
-                                    <ArrowUpRight className="w-2.5 h-2.5 mr-0.5" />
-                                    {stat.trend}
-                                </span>
-                            </div>
-                            <div className="mt-4">
-                                <h3 className="text-3xl font-bold text-slate-800">{stat.value}</h3>
-                                <p className="text-slate-500 font-medium text-sm">{stat.label}</p>
-                            </div>
+            {/* Content for PDF capture */}
+            <div id="analytics-content" className="space-y-6">
+                {/* Stats Grid - Matching Funding Report */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                        { label: 'Total Faculty', val: summary.totalFaculty, icon: Users, color: 'blue' },
+                        { label: 'Active Projects', val: summary.activeProjects, icon: Briefcase, color: 'emerald' },
+                        { label: 'Staff Reports (This Month)', val: summary.reportsThisMonth, icon: FileText, color: 'amber' },
+                        { label: 'Daily Logs (This Week)', val: summary.logsThisWeek, icon: Activity, color: 'rose' }
+                    ].map((s, i) => (
+                        <div key={i} className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm hover:border-gray-200 transition-all">
+                            <s.icon className={`text-${s.color}-600 mb-2 w-5 h-5`} />
+                            <h3 className="text-2xl font-bold text-gray-800 tracking-tight">{s.val}</h3>
+                            <p className="text-xs font-medium text-gray-500">{s.label}</p>
                         </div>
                     ))}
                 </div>
-            )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[400px]">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="font-bold text-slate-800 flex items-center">
-                            <Activity className="w-4 h-4 mr-2 text-primary-green" />
-                            Research Output Trend
+                {/* Consolidated Research Metrics Grid - UI VERSION */}
+                {reportData && (
+                    <div className="bg-white p-8 rounded-2xl border border-primary-green/20 shadow-sm relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-5">
+                            <TrendingUp size={120} />
+                        </div>
+                        
+                        <h2 className="text-xl font-black text-slate-800 mb-8 flex items-center gap-3">
+                            <Award className="w-6 h-6 text-primary-green" />
+                            Research Output Matrix
                         </h2>
-                        <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded">12-Month Performance</span>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-y-16 gap-x-12 relative z-10">
+                            {/* SCI Papers */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">sci papers</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">ACCEPTED / PUBLISHED</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-3xl font-black text-slate-800">{reportData.sci.accepted}</span>
+                                        <span className="text-xl text-slate-300 font-light">/</span>
+                                        <span className="text-3xl font-black text-primary-green">{reportData.sci.published}</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-primary-green" style={{ width: `${(reportData.sci.published / (reportData.sci.accepted + reportData.sci.published || 1)) * 100}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Scopus Papers */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Scopus paper</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">ACCEPTED / PUBLISHED</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-3xl font-black text-slate-800">{reportData.scopus.accepted}</span>
+                                        <span className="text-xl text-slate-300 font-light">/</span>
+                                        <span className="text-3xl font-black text-blue-600">{reportData.scopus.published}</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-blue-600" style={{ width: `${(reportData.scopus.published / (reportData.scopus.accepted + reportData.scopus.published || 1)) * 100}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Patent Published */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">patent published</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">TOTAL FILED</p>
+                                    <div className="text-3xl font-black text-amber-500">{reportData.patent.published}</div>
+                                    <div className="h-1 bg-amber-500/20 w-16"></div>
+                                </div>
+                            </div>
+
+                            {/* Patent Grant */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">patent grant</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">OFFICIAL GRANTS</p>
+                                    <div className="text-3xl font-black text-purple-600">{reportData.patent.grant}</div>
+                                    <div className="h-1 bg-purple-600/20 w-16"></div>
+                                </div>
+                            </div>
+
+                            {/* Row 2 */}
+                            {/* Conference Paper */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">conference paper</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">ACCEPTED / PUBLISHED</p>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-3xl font-black text-slate-800">{reportData.conference.accepted}</span>
+                                        <span className="text-xl text-slate-300 font-light">/</span>
+                                        <span className="text-3xl font-black text-indigo-500">{reportData.conference.published}</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div className="h-full bg-indigo-500" style={{ width: `${(reportData.conference.published / (reportData.conference.accepted + reportData.conference.published || 1)) * 100}%` }}></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Book Chapter */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">book/book chapter</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">PUBLICATIONS</p>
+                                    <div className="text-3xl font-black text-rose-500">{reportData.book}</div>
+                                    <div className="h-1 bg-rose-500/20 w-16"></div>
+                                </div>
+                            </div>
+
+                            {/* Funding Applied */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">funding Applied</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">SUBMITTED PROPOSALS</p>
+                                    <div className="text-3xl font-black text-emerald-600">{reportData.funding.applied}</div>
+                                    <div className="h-1 bg-emerald-600/20 w-16"></div>
+                                </div>
+                            </div>
+
+                            {/* Funding Received */}
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Funding received</h3>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] text-slate-500 font-bold">SANCTIONED PROJECTS</p>
+                                    <div className={`text-3xl font-black ${reportData.funding.received > 0 ? 'text-primary-green' : 'text-slate-300'}`}>
+                                        {reportData.funding.received > 0 ? reportData.funding.received : 'NIL'}
+                                    </div>
+                                    <div className="h-1 bg-primary-green/20 w-16"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <ResponsiveContainer width="100%" height="90%">
-                        <AreaChart data={trendData}>
-                            <defs>
-                                <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#16a34a" stopOpacity={0.1} />
-                                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                            <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                            <Tooltip
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                                cursor={{ stroke: '#16a34a', strokeWidth: 1, strokeDasharray: '4 4' }}
-                            />
-                            <Area type="monotone" dataKey="count" stroke="#16a34a" strokeWidth={3} fillOpacity={1} fill="url(#colorCount)" />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                )}
+
+                {/* Primary Charts */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                        <h3 className="text-sm font-bold text-gray-800 mb-6 flex items-center gap-2">
+                            <Activity size={18} className="text-primary-green" />
+                            Daily Submission Activity (Last 30 Days)
+                        </h3>
+                        <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={dailyLogs}>
+                                    <defs>
+                                        <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#16a34a" stopOpacity={0.1}/>
+                                            <stop offset="95%" stopColor="#16a34a" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="date" hide />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                    <Area type="monotone" dataKey="count" stroke="#16a34a" fillOpacity={1} fill="url(#colorCount)" strokeWidth={2} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                        <h3 className="text-sm font-bold text-gray-800 mb-6 flex items-center gap-2">
+                            <Briefcase size={18} className="text-blue-600" />
+                            Research Output Distribution
+                        </h3>
+                        <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={activitiesByType}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 10, fontWeight: 700 }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                                    <Tooltip />
+                                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                        {activitiesByType.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-[400px]">
-                    <div className="flex justify-between items-center mb-6">
-                        <h2 className="font-bold text-slate-800 flex items-center">
-                            <Users className="w-4 h-4 mr-2 text-brand-blue" />
-                            Departmental Contributions
-                        </h2>
-                        <Badge label="Active Departments" color="blue" />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                        <h3 className="text-sm font-bold text-gray-800 mb-6 flex items-center gap-2">
+                            <Calendar size={18} className="text-amber-500" />
+                            Monthly Trend (Current Year)
+                        </h3>
+                        <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={monthlySummary}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 10 }} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                                    <Tooltip />
+                                    <Line type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={3} dot={{ fill: '#f59e0b' }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
-                    <ResponsiveContainer width="100%" height="90%">
-                        <BarChart data={deptData} layout="vertical" margin={{ left: 20 }}>
-                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                            <YAxis type="category" dataKey="department" axisLine={false} tickLine={false} tick={{ fill: '#475569', fontSize: 11 }} />
-                            <Tooltip
-                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                            />
-                            <Legend iconType="circle" />
-                            <Bar dataKey="papers" fill="#16a34a" radius={[0, 4, 4, 0]} name="Papers" />
-                            <Bar dataKey="patents" fill="#2563eb" radius={[0, 4, 4, 0]} name="Patents" />
-                            <Bar dataKey="funded" fill="#f59e0b" radius={[0, 4, 4, 0]} name="Funded" />
-                        </BarChart>
-                    </ResponsiveContainer>
+
+                    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+                        <h3 className="text-sm font-bold text-gray-800 mb-6 flex items-center gap-2">
+                            <Search size={18} className="text-rose-500" />
+                            Faculty Reporting Participation
+                        </h3>
+                        {/* Summary View Instead of Table */}
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Active Reporters</span>
+                                <span className="font-bold text-primary-green">{facultyTable.filter(f => f.reportsSubmitted > 0).length}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Inactive in Last 30 Days</span>
+                                <span className="font-bold text-rose-500">{facultyTable.filter(f => (!f.lastActive || new Date(f.lastActive) < new Date(Date.now() - 30*24*60*60*1000))).length}</span>
+                            </div>
+                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                                <span className="text-sm text-gray-600 font-medium">Avg reports per faculty</span>
+                                <span className="font-bold text-blue-600">{(facultyTable.reduce((acc, f) => acc + f.reportsSubmitted, 0) / (facultyTable.length || 1)).toFixed(1)}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="font-bold text-slate-800 flex items-center">
-                        <Award className="w-4 h-4 mr-2 text-amber-500" />
-                        Current Top Performers
+            {/* List and Search - Dedicated Section */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="p-6 border-b flex flex-col md:flex-row justify-between items-center gap-4">
+                    <h2 className="font-bold text-gray-800 flex items-center gap-2">
+                        <Users size={20} className="text-primary-green" />
+                        Faculty Reporting Overview
                     </h2>
-                    <span className="text-xs text-slate-400">Scores based on approved research activities</span>
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input 
+                            type="text" 
+                            placeholder="Search by name, ID, or dept..." 
+                            className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-green focus:border-transparent outline-none"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead>
-                            <tr className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black tracking-widest">
-                                <th className="px-4 py-3 border-b">Rank</th>
-                                <th className="px-4 py-3 border-b">Member Name</th>
-                                <th className="px-4 py-3 border-b">Department</th>
-                                <th className="px-4 py-3 border-b">Research Score</th>
-                                <th className="px-4 py-3 border-b text-right">Badges</th>
+                            <tr className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b">
+                                <th className="px-6 py-4">Faculty</th>
+                                <th className="px-6 py-4">Department</th>
+                                <th className="px-6 py-4 text-center">Logs</th>
+                                <th className="px-6 py-4 text-center">Reports</th>
+                                <th className="px-6 py-4">Last Activity</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {topPerformers.map((staff, i) => (
-                                <tr key={staff._id} className="group hover:bg-slate-50/80 transition-all border-b last:border-0">
-                                    <td className="px-4 py-4">
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${i === 0 ? 'bg-amber-100 text-amber-700' :
-                                            i === 1 ? 'bg-slate-200 text-slate-700' :
-                                                i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'
-                                            }`}>
-                                            {i + 1}
+                        <tbody className="divide-y divide-gray-100">
+                            {filteredFaculty.map((f, i) => (
+                                <tr key={i} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-col">
+                                            <span className="font-bold text-gray-700 text-sm">{f.name}</span>
+                                            <span className="text-[10px] text-gray-400 font-bold">{f.staffId}</span>
                                         </div>
                                     </td>
-                                    <td className="px-4 py-4 font-bold text-slate-700">{staff.name}</td>
-                                    <td className="px-4 py-4 text-slate-500 text-sm">{staff.department}</td>
-                                    <td className="px-4 py-4">
-                                        <div className="flex items-center space-x-2">
-                                            <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-primary-green rounded-full" style={{ width: `${Math.min(100, staff.totalScore / 10)}%` }}></div>
-                                            </div>
-                                            <span className="text-sm font-bold text-primary-green">{staff.totalScore} pts</span>
-                                        </div>
+                                    <td className="px-6 py-4 text-sm font-medium text-gray-500">{f.department}</td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-md font-bold text-xs">{f.logsSubmitted}</span>
                                     </td>
-                                    <td className="px-4 py-4 text-right">
-                                        <div className="flex justify-end -space-x-1">
-                                            {(staff.badges || []).slice(0, 3).map((b, bi) => (
-                                                <div key={bi} className="bg-white border w-8 h-8 rounded-full flex items-center justify-center text-sm shadow-sm z-10">{b}</div>
-                                            )) || '⭐'}
-                                        </div>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="bg-green-50 text-green-700 px-2.5 py-1 rounded-md font-bold text-xs">{f.reportsSubmitted}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-xs font-bold text-gray-400">
+                                        {f.lastActive ? new Date(f.lastActive).toLocaleDateString() : 'No Activity'}
                                     </td>
                                 </tr>
                             ))}
-                            {topPerformers.length === 0 && (
-                                <tr>
-                                    <td colSpan="5" className="px-4 py-8 text-center text-slate-400">No performance data yet.</td>
-                                </tr>
-                            )}
                         </tbody>
                     </table>
                 </div>

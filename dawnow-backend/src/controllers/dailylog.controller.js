@@ -1,5 +1,6 @@
 const DailyLog = require('../models/DailyLog');
 const Leave = require('../models/Leave');
+const User = require('../models/User');
 const { runBackup } = require('../backup/backupEngine');
 
 // @desc    Create or update daily log
@@ -137,9 +138,41 @@ const getStreak = async (req, res) => {
     }
 };
 
+// @desc    Get all logs (Admin)
+// @route   GET /api/dailylog/admin
+// @access  Private (Admin)
+const getAllLogs = async (req, res) => {
+    try {
+        const { from, to, dept, staffId } = req.query;
+        const query = {};
+
+        if (from || to) {
+            query.date = {};
+            if (from) query.date.$gte = new Date(from);
+            if (to) query.date.$lte = new Date(to);
+        }
+
+        if (staffId) {
+            query.staff = staffId;
+        } else if (dept) {
+            const staffInDept = await User.find({ department: dept }).select('_id');
+            query.staff = { $in: staffInDept.map(s => s._id) };
+        }
+
+        const logs = await DailyLog.find(query)
+            .populate('staff', 'name department designation')
+            .sort({ date: -1 });
+        res.json(logs);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Server error' });
+    }
+};
+
 module.exports = {
     createOrUpdateLog,
     getMyLogs,
     getTodayLog,
-    getStreak
+    getStreak,
+    getAllLogs
 };

@@ -49,11 +49,15 @@ const isStaff = (req, res, next) => {
 
 // Admin middleware - verify role is admin
 const isAdmin = (req, res, next) => {
-    console.log('DEBUG: isAdmin Check - User:', req.user?._id, 'Role:', req.user?.role);
+    if (process.env.NODE_ENV === 'development') {
+        console.log('DEBUG: isAdmin Check - User:', req.user?._id, 'Role:', req.user?.role);
+    }
     if (req.user && req.user.role === 'admin') {
         next();
     } else {
-        console.log('DEBUG: isAdmin Rejected - Reason: Role is not admin');
+        if (process.env.NODE_ENV === 'development') {
+            console.log('DEBUG: isAdmin Rejected - Reason: Role is not admin');
+        }
         return res.status(403).json({ message: 'Access denied. Admin only.' });
     }
 };

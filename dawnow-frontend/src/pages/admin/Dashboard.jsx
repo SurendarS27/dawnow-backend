@@ -43,26 +43,33 @@ const AdminDashboard = () => {
     useEffect(() => {
         const fetchDashboard = async () => {
             try {
-                const response = await API.get('/admin/dashboard')
-                const data = response.data || {}
+                const [dashRes, sumRes, typeRes, monthRes] = await Promise.all([
+                    API.get('/admin/dashboard'),
+                    API.get('/stats/summary'),
+                    API.get('/stats/activities-by-type'),
+                    API.get('/stats/monthly-summary')
+                ]);
+
+                const dashData = dashRes.data || {};
+                const sumData = sumRes.data || {};
 
                 setStats({
-                    totalStaff: data.totalStaff || 0,
-                    reportsThisMonth: data.reportsThisMonth || 0,
-                    pendingApprovals: data.pendingApprovals || 0,
-                    pendingPwdRequests: data.pendingPwdRequests || 0,
-                    recentActivity: data.recentActivity || [],
-                    totalPapers: data.totalPapers || 0,
-                    totalProjects: data.totalProjects || 0,
-                    totalPatents: data.totalPatents || 0,
-                    totalBooks: data.totalBooks || 0,
-                    totalActivities: data.totalActivities || 0
-                })
+                    totalStaff: sumData.totalFaculty || dashData.totalStaff || 0,
+                    reportsThisMonth: sumData.reportsThisMonth || dashData.reportsThisMonth || 0,
+                    pendingApprovals: dashData.pendingApprovals || 0,
+                    pendingPwdRequests: dashData.pendingPwdRequests || 0,
+                    recentActivity: dashData.recentActivity || [],
+                    totalPapers: dashData.totalPapers || 0,
+                    totalProjects: dashData.totalProjects || 0,
+                    totalPatents: dashData.totalPatents || 0,
+                    totalBooks: dashData.totalBooks || 0,
+                    totalActivities: dashData.totalActivities || 0
+                });
 
-                // Set chart data if available
-                if (data.departmentStats) setDepartmentData(data.departmentStats)
-                if (data.monthlyStats) setMonthlyData(data.monthlyStats)
-                if (data.activityDistribution) setActivityData(data.activityDistribution)
+                if (typeRes.data) setActivityData(typeRes.data.map(t => ({ ...t, color: COLORS[Math.floor(Math.random() * COLORS.length)] })));
+                if (monthRes.data) setMonthlyData(monthRes.data.map(m => ({ month: m.month, submissions: m.count })));
+                if (dashData.departmentStats) setDepartmentData(dashData.departmentStats);
+                
             } catch (error) {
                 console.error('Error fetching dashboard:', error)
                 // Set demo data for visualization
@@ -143,51 +150,21 @@ const AdminDashboard = () => {
 
             {/* Research Stats Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-blue-100 text-sm">Papers</p>
-                            <p className="text-3xl font-bold mt-1">{stats.totalPapers}</p>
+                {[
+                    { label: 'Papers', val: stats.totalPapers, icon: FileText, color: 'blue' },
+                    { label: 'Projects', val: stats.totalProjects, icon: Award, color: 'purple' },
+                    { label: 'Patents', val: stats.totalPatents, icon: Lightbulb, color: 'amber' },
+                    { label: 'Books', val: stats.totalBooks, icon: BookOpen, color: 'green' },
+                    { label: 'Activities', val: stats.totalActivities, icon: Users, color: 'pink' }
+                ].map((s, i) => (
+                    <div key={i} className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm hover:border-gray-200 transition-all">
+                        <div className="flex items-center justify-between mb-2">
+                            <p className="text-gray-500 text-xs font-bold uppercase tracking-widest">{s.label}</p>
+                            <s.icon size={16} className={`text-${s.color}-500`} />
                         </div>
-                        <FileText size={32} className="opacity-80" />
+                        <p className="text-3xl font-black text-gray-800">{s.val}</p>
                     </div>
-                </div>
-                <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-5 text-white shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-purple-100 text-sm">Projects</p>
-                            <p className="text-3xl font-bold mt-1">{stats.totalProjects}</p>
-                        </div>
-                        <Award size={32} className="opacity-80" />
-                    </div>
-                </div>
-                <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-5 text-white shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-amber-100 text-sm">Patents</p>
-                            <p className="text-3xl font-bold mt-1">{stats.totalPatents}</p>
-                        </div>
-                        <Lightbulb size={32} className="opacity-80" />
-                    </div>
-                </div>
-                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 text-white shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-green-100 text-sm">Books</p>
-                            <p className="text-3xl font-bold mt-1">{stats.totalBooks}</p>
-                        </div>
-                        <BookOpen size={32} className="opacity-80" />
-                    </div>
-                </div>
-                <div className="bg-gradient-to-br from-pink-500 to-pink-600 rounded-xl p-5 text-white shadow-lg">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-pink-100 text-sm">Activities</p>
-                            <p className="text-3xl font-bold mt-1">{stats.totalActivities}</p>
-                        </div>
-                        <Users size={32} className="opacity-80" />
-                    </div>
-                </div>
+                ))}
             </div>
 
             {/* Charts Row */}

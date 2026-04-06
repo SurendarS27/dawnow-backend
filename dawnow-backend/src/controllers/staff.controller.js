@@ -51,16 +51,16 @@ const { calculateTaskScore } = require('../utils/scoreCalculator');
 const createTask = async (req, res) => {
     try {
         const currentHour = new Date().getHours();
-        const isAfter5PM = currentHour >= 17; // 5 PM or later
+        const isBefore5PM = currentHour < 17; // Before 5 PM
         
-        // Check if auto-approval is enabled and time is after 5 PM
+        // Check if auto-approval is enabled and time is before 5 PM
         const autoApprovalEnabled = await getAutoApprovalEnabled();
-        const shouldAutoApprove = autoApprovalEnabled && isAfter5PM;
+        const shouldAutoApprove = autoApprovalEnabled && isBefore5PM;
 
         const taskData = {
             ...req.body,
             staff: req.user._id,
-            ...(shouldAutoApprove && { status: 'approved', adminNote: 'Auto-approved (Submitted after 5 PM)' })
+            ...(shouldAutoApprove && { status: 'approved', adminNote: 'Auto-approved (Submitted before 5 PM)' })
         };
 
         const task = await TaskEntry.create(taskData);
@@ -151,15 +151,15 @@ const updateTask = async (req, res) => {
         }
 
         const currentHour = new Date().getHours();
-        const isAfter5PM = currentHour >= 17;
+        const isBefore5PM = currentHour < 17;
         
-        // Check if auto-approval is enabled and time is after 5 PM
+        // Check if auto-approval is enabled and time is before 5 PM
         const autoApprovalEnabled = await getAutoApprovalEnabled();
-        const shouldAutoApprove = autoApprovalEnabled && isAfter5PM;
+        const shouldAutoApprove = autoApprovalEnabled && isBefore5PM;
 
         const updateData = {
             ...req.body,
-            ...(shouldAutoApprove && { status: 'approved', adminNote: 'Auto-approved (Edited after 5 PM)' })
+            ...(shouldAutoApprove && { status: 'approved', adminNote: 'Auto-approved (Edited before 5 PM)' })
         };
 
         const updatedTask = await TaskEntry.findByIdAndUpdate(

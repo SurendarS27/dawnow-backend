@@ -23,7 +23,8 @@ const uploadDocument = async (req, res) => {
             fileName: req.file.filename,
             filePath: `/${req.file.path.replace(/\\/g, '/')}`,
             fileSize: req.file.size,
-            mimeType: req.file.mimetype
+            mimeType: req.file.mimetype,
+            base64Data: fs.readFileSync(req.file.path, { encoding: 'base64' })
         });
 
         res.status(201).json(document);

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { questionAPI } from '../../api'
+import { questionAPI, dailyLogAPI } from '../../api'
 import Badge from '../../components/ui/Badge'
 import Modal from '../../components/ui/Modal'
 import toast from 'react-hot-toast'
-import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight, GripVertical, Save } from 'lucide-react'
+import { Plus, Edit2, Trash2, ToggleLeft, ToggleRight, GripVertical, Save, Clock, Settings, Search, Calendar } from 'lucide-react'
 
 const TaskQuestions = () => {
     const [questions, setQuestions] = useState([])
@@ -12,6 +12,10 @@ const TaskQuestions = () => {
     const [modalOpen, setModalOpen] = useState(false)
     const [editingQuestion, setEditingQuestion] = useState(null)
     const [saving, setSaving] = useState(false)
+    const [activeTab, setActiveTab] = useState('builder') // 'builder' or 'logs'
+    const [dailyLogs, setDailyLogs] = useState([])
+    const [logsLoading, setLogsLoading] = useState(false)
+    const [logSearch, setLogSearch] = useState('')
 
     const [formData, setFormData] = useState({
         questionText: '',
@@ -49,8 +53,12 @@ const TaskQuestions = () => {
     ]
 
     useEffect(() => {
-        fetchQuestions()
-    }, [])
+        if (activeTab === 'builder') {
+            fetchQuestions()
+        } else {
+            fetchDailyLogs()
+        }
+    }, [activeTab])
 
     const fetchQuestions = async () => {
         setLoading(true)
@@ -64,6 +72,19 @@ const TaskQuestions = () => {
             toast.error('Failed to load questions')
         } finally {
             setLoading(false)
+        }
+    }
+
+    const fetchDailyLogs = async () => {
+        setLogsLoading(true)
+        try {
+            const response = await dailyLogAPI.getAllAdmin()
+            setDailyLogs(response.data || [])
+        } catch (error) {
+            console.error('Error fetching logs:', error)
+            toast.error('Failed to load daily logs')
+        } finally {
+            setLogsLoading(false)
         }
     }
 
@@ -191,7 +212,33 @@ const TaskQuestions = () => {
 
     return (
         <div className="space-y-6">
-            {/* Built-in Sections Info */}
+            {/* Tab Switching */}
+            <div className="flex border-b border-gray-200">
+                <button
+                    onClick={() => setActiveTab('builder')}
+                    className={`px-6 py-3 font-medium text-sm flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'builder'
+                            ? 'border-primary-green text-primary-green'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                >
+                    <Settings size={18} />
+                    Question Builder
+                </button>
+                <button
+                    onClick={() => setActiveTab('logs')}
+                    className={`px-6 py-3 font-medium text-sm flex items-center gap-2 transition-colors border-b-2 ${activeTab === 'logs'
+                            ? 'border-primary-green text-primary-green'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                        }`}
+                >
+                    <Clock size={18} />
+                    Log History (Staff Daily Activities)
+                </button>
+            </div>
+
+            {activeTab === 'builder' ? (
+                <>
+                    {/* Built-in Sections Info */}
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                 <h2 className="text-lg font-heading font-semibold text-gray-800 mb-4">Built-in Sections</h2>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -316,7 +363,15 @@ const TaskQuestions = () => {
                     </div>
                 )}
             </div>
-
+            </>
+            ) : (
+                <LogHistoryView 
+                    logs={dailyLogs} 
+                    loading={logsLoading} 
+                    logSearch={logSearch}
+                    setLogSearch={setLogSearch}
+                />
+            )}
             {/* Modal */}
             <Modal
                 isOpen={modalOpen}
@@ -503,5 +558,109 @@ const TaskQuestions = () => {
         </div>
     )
 }
+
+const LogHistoryView = ({ logs, loading, logSearch, setLogSearch }) => {
+    const filteredLogs = logs.filter(log =>
+        log.staff?.name?.toLowerCase().includes(logSearch.toLowerCase()) ||
+        log.workDone?.toLowerCase().includes(logSearch.toLowerCase()) ||
+        log.staff?.department?.toLowerCase().includes(logSearch.toLowerCase())
+    )
+
+    return (
+        <div className="space-y-6 animate-in fade-in duration-300">
+            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h2 className="text-lg font-heading font-semibold text-gray-800">Staff Daily Log History</h2>
+                        <p className="text-sm text-gray-500 mt-1">View history of daily activities submitted by staff</p>
+                    </div>
+                    <div className="relative">
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                            type="text"
+                            value={logSearch}
+                            onChange={(e) => setLogSearch(e.target.value)}
+                            placeholder="Search by staff, work, or dept..."
+                            className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary-green focus:border-transparent min-w-[280px]"
+                        />
+                    </div>
+                </div>
+
+                {loading ? (
+                    <div className="text-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-green mx-auto"></div>
+                        <p className="mt-2 text-gray-500">Loading daily logs...</p>
+                    </div>
+                ) : filteredLogs.length === 0 ? (
+                    <div className="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
+                        <Calendar size={48} className="mx-auto mb-3 opacity-20" />
+                        <p className="text-lg mb-2">No activity logs found</p>
+                        <p className="text-sm">Daily logs submitted by staff will appear here</p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <Table className="w-full">
+                            <thead className="bg-gray-50 border-y border-gray-100">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Staff Member</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Department</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Work Done</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Hours</th>
+                                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Progress</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {filteredLogs.map((log) => (
+                                    <tr key={log._id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-600">
+                                            {new Date(log.date).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <div className="w-8 h-8 rounded-full bg-primary-green/10 flex items-center justify-center text-primary-green font-bold text-xs mr-3">
+                                                    {log.staff?.name?.charAt(0) || 'S'}
+                                                </div>
+                                                <span className="text-sm font-semibold text-gray-800">{log.staff?.name || 'Unknown'}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap">
+                                            <Badge variant="info">{log.staff?.department || 'N/A'}</Badge>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <div className="max-w-xs overflow-hidden text-ellipsis text-sm text-gray-700">
+                                                {log.isLeaveDay ? (
+                                                    <span className="text-orange-600 font-bold italic">LEAVE DAY</span>
+                                                ) : (
+                                                    log.workDone || <span className="text-gray-400 italic">No description</span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-600">
+                                            {log.hoursSpent ? `${log.hoursSpent} hrs` : '-'}
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-16 bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                                                    <div
+                                                        className="bg-primary-green h-full rounded-full"
+                                                        style={{ width: `${log.progressPercent || 0}%` }}
+                                                    ></div>
+                                                </div>
+                                                <span className="text-xs font-bold text-gray-500">{log.progressPercent || 0}%</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </Table>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+const Table = ({ children, className }) => <table className={className}>{children}</table>
 
 export default TaskQuestions

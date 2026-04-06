@@ -12,9 +12,12 @@ const DocumentVerification = () => {
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedDept, setSelectedDept] = useState('');
     const [selectedDoc, setSelectedDoc] = useState(null);
     const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
     const [verifyNote, setVerifyNote] = useState('');
+    
+    const departments = ['CSE', 'EEE', 'ECE', 'MECH', 'CIVIL', 'IT', 'MCA'];
 
     useEffect(() => {
         fetchDocuments();
@@ -49,30 +52,55 @@ const DocumentVerification = () => {
         }
     };
 
-    const filteredDocs = documents.filter(doc =>
-        doc.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.staff?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.docType?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredDocs = documents.filter(doc => {
+        const search = searchTerm.toLowerCase().trim();
+        const matchesSearch = !search || 
+            doc.title?.toLowerCase().includes(search) ||
+            doc.staff?.name?.toLowerCase().includes(search) ||
+            doc.staff?.staffId?.toLowerCase().includes(search) ||
+            doc.staff?.department?.toLowerCase().includes(search) ||
+            doc.docType?.toLowerCase().includes(search);
+            
+        const matchesDept = !selectedDept || doc.staff?.department === selectedDept;
+        
+        return matchesSearch && matchesDept;
+    });
 
     if (loading) return <div className="p-8 text-center text-slate-500">Loading Documents...</div>;
 
     return (
         <div className="space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-                <div>
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex flex-col lg:flex-row justify-between items-center space-y-4 lg:space-y-0">
+                <div className="w-full lg:w-auto">
                     <h1 className="text-2xl font-bold text-slate-800">Research Verification</h1>
-                    <p className="text-slate-500 text-sm">Review proof documents for publications and patents.</p>
+                    <p className="text-slate-500 text-sm font-medium">Review and verify proof documents for research activities.</p>
                 </div>
-                <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2 w-full md:w-80">
-                    <Search className="w-4 h-4 text-slate-400 mr-2" />
-                    <input
-                        type="search"
-                        placeholder="Search by staff, title, type..."
-                        className="bg-transparent text-sm outline-none w-full"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
+                
+                <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-4 w-full lg:w-auto">
+                    {/* Department Filter */}
+                    <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2 w-full md:w-48">
+                        <Filter className="w-4 h-4 text-slate-400 mr-2" />
+                        <select
+                            className="bg-transparent text-sm outline-none w-full font-bold text-slate-600"
+                            value={selectedDept}
+                            onChange={(e) => setSelectedDept(e.target.value)}
+                        >
+                            <option value="">All Depts</option>
+                            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="flex items-center bg-slate-100 rounded-lg px-3 py-2 w-full md:w-80">
+                        <Search className="w-4 h-4 text-slate-400 mr-2" />
+                        <input
+                            type="search"
+                            placeholder="Search staff, ID, title, type..."
+                            className="bg-transparent text-sm outline-none w-full font-medium"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                 </div>
             </div>
 

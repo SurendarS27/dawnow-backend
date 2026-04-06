@@ -7,10 +7,12 @@ import ProgressBar from '../../components/ui/ProgressBar';
 import {
     Trophy, TrendingUp, Calendar, Bell,
     FileText, CheckCircle, Clock, AlertCircle,
-    ArrowRight, Star, Target, Zap
+    ArrowRight, Star, Target, Zap, Download
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import BannerBox from '../../components/ui/BannerBox';
+import { jsPDF } from 'jspdf';
+import toast from 'react-hot-toast';
 
 const Dashboard = () => {
     const { user } = useAuth();
@@ -27,10 +29,11 @@ const Dashboard = () => {
     useEffect(() => {
         const fetchDashboard = async () => {
             try {
-                const [userRes, streakRes, noticeRes] = await Promise.all([
+                const [userRes, streakRes, noticeRes, taskRes] = await Promise.all([
                     API.get('/score/my'),
                     API.get('/dailylog/streak'),
-                    API.get('/notices')
+                    API.get('/notices'),
+                    API.get('/staff/tasks?limit=5')
                 ]);
 
                 setDashboardData({
@@ -38,7 +41,8 @@ const Dashboard = () => {
                     rank: '#15', // Placeholder for rank
                     streak: streakRes?.data?.streak || 0,
                     nextGoal: { title: 'Annual Research Target', progress: 45 },
-                    notices: noticeRes?.data || []
+                    notices: noticeRes?.data || [],
+                    recentLogs: taskRes?.data?.tasks || []
                 });
             } catch (err) {
                 console.error(err);
@@ -48,6 +52,24 @@ const Dashboard = () => {
         };
         fetchDashboard();
     }, []);
+
+    const handleDownloadPDF = (task) => {
+        try {
+            const doc = new jsPDF()
+            const pageWidth = doc.internal.pageSize.getWidth()
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(14)
+            doc.text('JJCET - CENTRE FOR RESEARCH & DEVELOPMENT', pageWidth/2, 15, {align: 'center'})
+            doc.setFontSize(10)
+            doc.text(`Staff: ${user?.name}`, 20, 30)
+            doc.text(`Activity: ${task.paperTitle || task.projectName || task.patentTitle || 'Research Entry'}`, 20, 37)
+            doc.text(`Date: ${new Date(task.date).toLocaleDateString()}`, 20, 44)
+            doc.save(`Report_${task._id}.pdf`)
+            toast.success('Report downloaded!')
+        } catch (e) {
+            toast.error('PDF generation failed')
+        }
+    }
 
     if (loading) return <div className="p-8 text-center animate-pulse">Loading Workspace...</div>;
 
@@ -126,10 +148,48 @@ const Dashboard = () => {
                     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
                         <div className="p-6 border-b border-slate-50 flex justify-between items-center">
                             <h2 className="font-bold text-slate-800 flex items-center">
-                                <Calendar className="w-4 h-4 mr-2 text-primary-green" />
-                                Recent Activity Log
+                                <FileText className="w-4 h-4 mr-2 text-primary-green" />
+                                Recent Research Entries
                             </h2>
-                            <Link to="/staff/daily-log" className="text-xs font-bold text-primary-green uppercase tracking-wider hover:underline">View All</Link>
+                            <Link to="/staff/view-report" className="text-xs font-bold text-primary-green uppercase tracking-wider hover:underline">View All</Link>
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                            {dashboardData.recentLogs.length === 0 ? (
+                                <div className="p-8 text-center text-slate-400 text-sm italic">No research activities submitted yet.</div>
+                            ) : (
+                                dashboardData.recentLogs.map((task, i) => (
+                                    <div key={i} className="p-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="bg-primary-green/10 p-2 rounded-lg">
+                                                <FileText className="w-4 h-4 text-primary-green" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-700 truncate max-w-[200px]">
+                                                    {task.paperTitle || task.projectName || task.patentTitle || 'Research Entry'}
+                                                </h4>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                                    {new Date(task.date).toLocaleDateString()} • {task.status}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleDownloadPDF(task)}
+                                            className="p-2 text-slate-400 hover:text-primary-green hover:bg-primary-green/5 rounded-lg transition-all"
+                                        >
+                                            <Download size={18} />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="p-6 border-b border-slate-50 flex justify-between items-center">
+                            <h2 className="font-bold text-slate-800 flex items-center">
+                                <Calendar className="w-4 h-4 mr-2 text-primary-green" />
+                                Activity Consistency
+                            </h2>
                         </div>
                         <div className="p-6">
                             {/* Heatmap Placeholder */}

@@ -27,6 +27,7 @@ const documentSchema = new mongoose.Schema({
     filePath: String,
     fileSize: Number,
     mimeType: String,
+    base64Data: String,
     isVerified: {
         type: Boolean,
         default: false

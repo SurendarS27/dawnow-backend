@@ -5,6 +5,7 @@ import { questionAPI, answerAPI, taskAPI } from '../../api'
 import toast from 'react-hot-toast'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
+import { jsPDF } from 'jspdf';
 import { FileText, BookOpen, Award, Users, Plus, Eye, Download, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 
 const TaskEntry = () => {
@@ -310,82 +311,179 @@ const TaskEntry = () => {
         toast.success('Form cleared')
     }
 
-    // Generate PDF report
+    // Generate PDF report using jsPDF
     const handleDownloadPDF = () => {
-        const content = `
-JJCET - Centre for Research & Development
-Monthly Research Workload Report
-=====================================
+        try {
+            const doc = new jsPDF()
+            const pageWidth = doc.internal.pageSize.getWidth()
+            const pageHeight = doc.internal.pageSize.getHeight()
+            const margin = 20
+            const contentWidth = pageWidth - (margin * 2)
+            
+            const pageHeader = 'JJCET - CENTRE FOR RESEARCH & DEVELOPMENT'
+            const title = 'Monthly Research Workload Report'
+            
+            // Helper to clean text and remove common artifact characters
+            const cleanText = (text) => {
+                if (!text || typeof text !== 'string') return text;
+                return text.replace(/[^\x20-\x7E\n\r\t]/g, ''); // Keep only basic ASCII and common whitespace
+            };
 
-Staff Name: ${user?.name || 'N/A'}
-Department: ${user?.department || 'N/A'}
-Date: ${date.toLocaleDateString()}
-Academic Year: ${academicYear}
-
-SECTION 1: PAPER WORK LOAD
---------------------------
-Paper Title: ${formData.paperTitle || 'N/A'}
-Paper Status: ${formData.paperStatus || 'N/A'}
-Journal Type: ${formData.journalType || 'N/A'}
-Journal Name: ${formData.journalName || 'N/A'}
-Impact Factor: ${formData.impactFactor || 'N/A'}
-
-SECTION 2: FUNDED PROJECT
---------------------------
-Project Name: ${formData.projectName || 'N/A'}
-Project Status: ${formData.projectStatus || 'N/A'}
-Funding Title: ${formData.fundingTitle || 'N/A'}
-Funding Agency: ${formData.fundingAgency || 'N/A'}
-Funding Amount: ${formData.fundingAmount ? `Rs. ${formData.fundingAmount}` : 'N/A'}
-
-SECTION 3: PATENT
------------------
-Patent Type: ${formData.patentType || 'N/A'}
-Patent Level: ${formData.patentLevel || 'N/A'}
-Patent Title: ${formData.patentTitle || 'N/A'}
-Application Number: ${formData.applicationNumber || 'N/A'}
-Filing Date: ${formData.filingDate || 'N/A'}
-Page Number: ${formData.pageNumber || 'N/A'}
-
-SECTION 4: BOOK WRITING
-------------------------
-Author Name: ${formData.authorName || 'N/A'}
-Book Status: ${formData.bookStatus || 'N/A'}
-Book Title: ${formData.bookTitle || 'N/A'}
-Publisher: ${formData.publisherName || 'N/A'}
-ISBN: ${formData.isbnNumber || 'N/A'}
-Year: ${formData.publishedYear || 'N/A'}
-
-SECTION 5: OTHER ACTIVITIES
-----------------------------
-Activity Type: ${formData.activityType || 'N/A'}
-Activity Title: ${formData.activityTitle || 'N/A'}
-Organized By: ${formData.organizedBy || 'N/A'}
-Date: ${formData.activityDate || 'N/A'}
-
-SECTION 6: ADDITIONAL WORKLOAD
--------------------------------
-${formData.additionalWorkload1 ? `1. ${formData.additionalWorkload1}` : ''}
-${formData.additionalWorkload2 ? `2. ${formData.additionalWorkload2}` : ''}
-${formData.additionalWorkload3 ? `3. ${formData.additionalWorkload3}` : ''}
-${formData.additionalWorkload4 ? `4. ${formData.additionalWorkload4}` : ''}
-${formData.additionalWorkload5 ? `5. ${formData.additionalWorkload5}` : ''}
-
-=====================================
-Generated on: ${new Date().toLocaleString()}
-Powered by NexoraCrew
-        `.trim()
-
-        const blob = new Blob([content], { type: 'text/plain' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `JJCET_Report_${date.toISOString().split('T')[0]}.txt`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
-        toast.success('Report downloaded!')
+            // Setup font styles
+            doc.setFont('helvetica', 'bold')
+            doc.setFontSize(14)
+            doc.setTextColor(31, 41, 55) // Slate 800
+            doc.text(pageHeader, pageWidth / 2, 15, { align: 'center' })
+            
+            doc.setFontSize(12)
+            doc.text(title, pageWidth / 2, 22, { align: 'center' })
+            
+            doc.setFont('helvetica', 'normal')
+            doc.setFontSize(10)
+            doc.setDrawColor(229, 231, 235) // Gray 200
+            doc.line(margin, 26, pageWidth - margin, 26) // Draw line
+            
+            // Metadata
+            doc.setTextColor(75, 85, 99) // Gray 600
+            doc.text(`Staff Name: ${user?.name || 'N/A'}`, margin, 35)
+            doc.text(`Department: ${user?.department || 'N/A'}`, margin, 42)
+            doc.text(`Date: ${date.toLocaleDateString()}`, margin, 49)
+            doc.text(`Academic Year: ${academicYear}`, margin, 56)
+            
+            let y = 70
+            const lineHeight = 7 // Standard line height
+            
+            const checkPageBreak = (neededHeight) => {
+                if (y + neededHeight > pageHeight - 20) {
+                    doc.addPage()
+                    y = 25
+                    return true
+                }
+                return false
+            }
+            
+            const renderSectionHeader = (header) => {
+                checkPageBreak(15)
+                doc.setFont('helvetica', 'bold')
+                doc.setFillColor(243, 244, 246) // Gray 100
+                doc.rect(margin, y - 6, contentWidth, 9, 'F')
+                doc.setTextColor(17, 24, 39) // Gray 900
+                doc.text(header, margin + 5, y)
+                doc.setFont('helvetica', 'normal')
+                doc.setTextColor(55, 65, 81) // Gray 700
+                y += 12
+            }
+            
+            const renderField = (label, value) => {
+                const cleanedValue = cleanText(value);
+                if (!cleanedValue || cleanedValue === '' || cleanedValue === 'N/A') return
+                
+                const labelText = `${label}: `
+                const valueText = String(cleanedValue)
+                
+                doc.setFont('helvetica', 'bold')
+                const labelWidth = doc.getTextWidth(labelText)
+                
+                doc.setFont('helvetica', 'normal')
+                const splitValue = doc.splitTextToSize(valueText, contentWidth - labelWidth - 10)
+                
+                const blockHeight = splitValue.length * lineHeight
+                checkPageBreak(blockHeight + 4)
+                
+                doc.setFont('helvetica', 'bold')
+                doc.text(labelText, margin + 5, y)
+                
+                doc.setFont('helvetica', 'normal')
+                doc.text(splitValue, margin + 5 + labelWidth, y)
+                
+                y += blockHeight + 4
+            }
+            
+            // Section 1
+            renderSectionHeader('SECTION 1: PAPER WORKLOAD')
+            renderField('Paper Title', formData.paperTitle)
+            renderField('Paper Status', formData.paperStatus)
+            renderField('Journal Type', formData.journalType)
+            renderField('Journal Name', formData.journalName)
+            renderField('Impact Factor', formData.impactFactor)
+            
+            // Section 2
+            y += 5
+            renderSectionHeader('SECTION 2: FUNDED PROJECT')
+            renderField('Project Name', formData.projectName)
+            renderField('Project Status', formData.projectStatus)
+            renderField('Funding Title', formData.fundingTitle)
+            renderField('Funding Agency', formData.fundingAgency)
+            renderField('Funding Amount', formData.fundingAmount ? `Rs. ${formData.fundingAmount}` : null)
+            
+            // Section 3
+            y += 5
+            renderSectionHeader('SECTION 3: PATENT')
+            renderField('Patent Type', formData.patentType)
+            renderField('Patent Level', formData.patentLevel)
+            renderField('Patent Title', formData.patentTitle)
+            renderField('App. Number', formData.applicationNumber)
+            renderField('Filing Date', formData.filingDate)
+            renderField('Page Number', formData.pageNumber)
+            
+            // Section 4
+            y += 5
+            renderSectionHeader('SECTION 4: BOOK WRITING')
+            renderField('Author Name', formData.authorName)
+            renderField('Book Status', formData.bookStatus)
+            renderField('Book Title', formData.bookTitle)
+            renderField('Publisher', formData.publisherName)
+            renderField('ISBN', formData.isbnNumber)
+            renderField('Year', formData.publishedYear)
+            
+            // Section 5
+            y += 5
+            renderSectionHeader('SECTION 5: OTHER ACTIVITIES')
+            renderField('Activity Type', formData.activityType)
+            renderField('Activity Title', formData.activityTitle)
+            renderField('Organized By', formData.organizedBy)
+            renderField('Date', formData.activityDate)
+            
+            // Section 6
+            y += 5
+            renderSectionHeader('SECTION 6: ADDITIONAL WORKLOAD')
+            for (let i = 1; i <= 5; i++) {
+                const rawText = formData[`additionalWorkload${i}`];
+                if (rawText) {
+                    const text = cleanText(String(rawText))
+                    const splitText = doc.splitTextToSize(`${i}. ${text}`, contentWidth - 10)
+                    checkPageBreak(splitText.length * lineHeight + 5)
+                    doc.text(splitText, margin + 5, y)
+                    y += (splitText.length * lineHeight) + 6
+                }
+            }
+            
+            // Dynamic Questions
+            if (Object.keys(dynamicAnswers).length > 0) {
+                y += 5
+                renderSectionHeader('SECTION 7: DYNAMIC FIELD RESPONSES')
+                Object.entries(dynamicAnswers).forEach(([qId, val]) => {
+                    const questionObj = questions.find(q => q._id === qId)
+                    if (questionObj && val) {
+                        const label = questionObj.label || questionObj.questionText
+                        let valueDisplay = ''
+                        if (typeof val === 'boolean') valueDisplay = val ? 'Yes' : 'No'
+                        else if (Array.isArray(val)) valueDisplay = val.join(', ')
+                        else valueDisplay = String(val)
+                        
+                        if (valueDisplay && valueDisplay !== 'false' && valueDisplay !== '') {
+                            renderField(label, valueDisplay)
+                        }
+                    }
+                })
+            }
+            
+            doc.save(`JJCET_Research_Report_${date.toISOString().split('T')[0]}.pdf`)
+            toast.success('Professional PDF report generated!')
+        } catch (error) {
+            console.error('PDF Generation Error:', error)
+            toast.error('Failed to generate report')
+        }
     }
 
     // Submit form
@@ -531,7 +629,7 @@ Powered by NexoraCrew
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Journal Type</label>
-                            {renderInput('dropdown', 'journalType', formData.journalType, (v) => handleChange('journalType', v), ['SCI', 'Scopus', 'Conference', 'UGC Care', 'Other'])}
+                            {renderInput('dropdown', 'journalType', formData.journalType, (v) => handleChange('journalType', v), ['SCI', 'Scopus', 'Conference', 'Other'])}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -595,7 +693,7 @@ Powered by NexoraCrew
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Patent Level</label>
-                            {renderInput('dropdown', 'patentLevel', formData.patentLevel, (v) => handleChange('patentLevel', v), ['First', 'Design', 'Utility'])}
+                            {renderInput('dropdown', 'patentLevel', formData.patentLevel, (v) => handleChange('patentLevel', v), ['Design', 'Utility'])}
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Patent Title</label>
