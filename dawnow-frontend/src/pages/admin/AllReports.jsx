@@ -56,10 +56,12 @@ const AllReports = () => {
         const fetchAutoApprovalSetting = async () => {
             try {
                 const response = await settingsAPI.getSetting('autoApprovalEnabled')
-                // Default to true if not set
-                setAutoApprovalEnabled(response.data.value !== false)
+                // Default to true if value is null, undefined, or not set
+                const settingValue = response.data.value
+                setAutoApprovalEnabled(settingValue === undefined || settingValue === null ? true : settingValue)
             } catch (error) {
                 console.error('Error fetching auto-approval setting:', error)
+                // Default to true on error
                 setAutoApprovalEnabled(true)
             }
         }
@@ -69,10 +71,11 @@ const AllReports = () => {
     const handleAutoApprovalToggle = async () => {
         try {
             const newValue = !autoApprovalEnabled
-            await settingsAPI.setSetting('autoApprovalEnabled', newValue, 'Enable/disable automatic approval of reports submitted after 5 PM')
+            await settingsAPI.setSetting('autoApprovalEnabled', newValue, 'Enable/disable automatic approval of reports submitted before 5 PM')
             setAutoApprovalEnabled(newValue)
             toast.success(newValue ? 'Auto Approval enabled' : 'Auto Approval disabled')
         } catch (error) {
+            console.error('Error toggling auto-approval:', error)
             toast.error('Failed to update setting')
         }
     }
